@@ -13,6 +13,8 @@
 # limitations under the License.
 import os
 import sys
+from PIL import Image
+import ntpath
 
 __dir__ = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(__dir__)
@@ -35,6 +37,9 @@ from PIL import Image
 from tools.infer.utility import draw_ocr
 from tools.infer.utility import draw_ocr_box_txt
 
+def path_leaf(path):
+    head, tail = ntpath.split(path)
+    return tail or ntpath.basename(head)
 
 class TextSystem(object):
     def __init__(self, args):
@@ -86,7 +91,6 @@ class TextSystem(object):
     def __call__(self, img):
         ori_im = img.copy()
         dt_boxes, elapse = self.text_detector(img)
-        print("dt_boxes num : {}, elapse : {}".format(len(dt_boxes), elapse))
         if dt_boxes is None:
             return None, None
         img_crop_list = []
@@ -100,10 +104,7 @@ class TextSystem(object):
         if self.use_angle_cls:
             img_crop_list, angle_list, elapse = self.text_classifier(
                 img_crop_list)
-            print("cls num  : {}, elapse : {}".format(
-                len(img_crop_list), elapse))
         rec_res, elapse = self.text_recognizer(img_crop_list)
-        print("rec_res num  : {}, elapse : {}".format(len(rec_res), elapse))
         # self.print_draw_crop_rec_res(img_crop_list, rec_res)
         return dt_boxes, rec_res
 
@@ -132,8 +133,8 @@ def sorted_boxes(dt_boxes):
 def main(args):
     image_file_list = get_image_file_list(args.image_dir)
     text_sys = TextSystem(args)
-    is_visualize = True
     font_path = args.vis_font_path
+    results = {}
     for image_file in image_file_list:
         img, flag = check_and_read_gif(image_file)
         if not flag:
@@ -144,38 +145,31 @@ def main(args):
         starttime = time.time()
         dt_boxes, rec_res = text_sys(img)
         elapse = time.time() - starttime
-        print("Predict time of %s: %.3fs" % (image_file, elapse))
+        converted_boxes = [box.tolist() for box in dt_boxes]
+
+        converted_text = []
+        converted_confs = []
 
         drop_score = 0.5
         dt_num = len(dt_boxes)
         for dno in range(dt_num):
             text, score = rec_res[dno]
             if score >= drop_score:
-                text_str = "%s, %.3f" % (text, score)
-                print(text_str)
+                converted_text.append(text)
+                converted_confs.append(score)
 
-        if is_visualize:
-            image = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-            boxes = dt_boxes
-            txts = [rec_res[i][0] for i in range(len(rec_res))]
-            scores = [rec_res[i][1] for i in range(len(rec_res))]
+        picture = Image.open(image_file)
+        width, height = picture.size
 
-            draw_img = draw_ocr_box_txt(
-                image,
-                boxes,
-                txts,
-                scores,
-                drop_score=drop_score,
-                font_path=font_path)
-            draw_img_save = "./inference_results/"
-            if not os.path.exists(draw_img_save):
-                os.makedirs(draw_img_save)
-            cv2.imwrite(
-                os.path.join(draw_img_save, os.path.basename(image_file)),
-                draw_img[:, :, ::-1])
-            print("The visualized image saved in {}".format(
-                os.path.join(draw_img_save, os.path.basename(image_file))))
+        i = 0
+        for text in converted_text:
+            textResults = {'text': text, 'boundingBox': converted_boxes[i], 'confidence': converted_confs[i],
+                           'height': height, 'width': width, 'predictionTime': elapse}
+            filename = path_leaf(image_file)
+            results[filename] = textResults
+            i += 1
 
+    print(results)
 
 if __name__ == "__main__":
     main(utility.parse_args())
