@@ -13,7 +13,6 @@
 # limitations under the License.
 import os
 import sys
-from PIL import Image
 import ntpath
 
 __dir__ = os.path.dirname(os.path.abspath(__file__))
@@ -150,7 +149,7 @@ def main(args):
         converted_text = []
         converted_confs = []
 
-        drop_score = 0.5
+        drop_score = 0.1
         dt_num = len(dt_boxes)
         for dno in range(dt_num):
             text, score = rec_res[dno]
@@ -158,13 +157,10 @@ def main(args):
                 converted_text.append(text)
                 converted_confs.append(score)
 
-        picture = Image.open(image_file)
-        width, height = picture.size
-
         i = 0
         for text in converted_text:
             textResults = {'text': text, 'boundingBox': converted_boxes[i], 'confidence': converted_confs[i],
-                           'height': height, 'width': width, 'predictionTime': elapse}
+                           'predictionTime': elapse}
             filename = path_leaf(image_file)
             results[filename] = textResults
             i += 1
